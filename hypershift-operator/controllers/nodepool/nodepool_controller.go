@@ -682,7 +682,7 @@ func (r *NodePoolReconciler) reconcile(ctx context.Context, hcluster *hyperv1.Ho
 	}
 
 	// Validate tuningConfig input.
-	tunedConfig, performanceProfileConfig, err := r.getTuningConfig(ctx, nodePool)
+	tunedConfig, performanceProfileConfig, performanceProfileConfigMapName, err := r.getTuningConfig(ctx, nodePool)
 	if err != nil {
 		SetStatusCondition(&nodePool.Status.Conditions, hyperv1.NodePoolCondition{
 			Type:               hyperv1.NodePoolValidTuningConfigConditionType,
@@ -735,7 +735,7 @@ func (r *NodePoolReconciler) reconcile(ctx context.Context, hcluster *hyperv1.Ho
 		}
 	}
 
-	performanceProfileConfigMap := PerformanceProfileConfigMap(controlPlaneNamespace, nodePool.Name)
+	performanceProfileConfigMap := PerformanceProfileConfigMap(controlPlaneNamespace, performanceProfileConfigMapName, nodePool.Name)
 	if performanceProfileConfig == "" {
 		if _, err := supportutil.DeleteIfNeeded(ctx, r.Client, performanceProfileConfigMap); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete performanceprofileConfig ConfigMap: %w", err)
@@ -2167,10 +2167,11 @@ func (r *NodePoolReconciler) getConfig(ctx context.Context,
 
 func (r *NodePoolReconciler) getTuningConfig(ctx context.Context,
 	nodePool *hyperv1.NodePool,
-) (string, string, error) {
+) (string, string, string, error) {
 	var (
 		configs                              []corev1.ConfigMap
 		tunedAllConfigPlainText              []string
+		performanceProfileConfigMapName      string
 		performanceProfileAllConfigPlainText []string
 		errors                               []error
 	)
@@ -2204,6 +2205,7 @@ func (r *NodePoolReconciler) getTuningConfig(ctx context.Context,
 			tunedAllConfigPlainText = append(tunedAllConfigPlainText, string(manifestTuned))
 		}
 		if manifestPerformanceProfile != nil {
+			performanceProfileConfigMapName = config.Name
 			performanceProfileAllConfigPlainText = append(performanceProfileAllConfigPlainText, string(manifestPerformanceProfile))
 		}
 	}
@@ -2216,7 +2218,7 @@ func (r *NodePoolReconciler) getTuningConfig(ctx context.Context,
 	sort.Strings(tunedAllConfigPlainText)
 	sort.Strings(performanceProfileAllConfigPlainText)
 
-	return strings.Join(tunedAllConfigPlainText, "\n---\n"), strings.Join(performanceProfileAllConfigPlainText, "\n---\n"), utilerrors.NewAggregate(errors)
+	return strings.Join(tunedAllConfigPlainText, "\n---\n"), strings.Join(performanceProfileAllConfigPlainText, "\n---\n"), performanceProfileConfigMapName, utilerrors.NewAggregate(errors)
 
 }
 
